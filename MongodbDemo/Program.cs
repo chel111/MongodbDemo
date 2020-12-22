@@ -2,6 +2,8 @@
 using System.Threading.Tasks;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using MongodbDemo.Documents;
+using System.Linq;
 
 namespace MongodbDemo
 {
@@ -13,72 +15,36 @@ namespace MongodbDemo
             MongoClient dbClient = new MongoClient("mongodb://localhost:27017/?readPreference=primary&appname=MongoDB%20Compass&ssl=false");
 
             var database = dbClient.GetDatabase("university");
-            var subjectCollection = database.GetCollection<BsonDocument>("subjects");
-            var addressCollection = database.GetCollection<BsonDocument>("address");
+            var professors = database.GetCollection<Professor>("professors");
+            var departments = database.GetCollection<Department>("departments");
 
-            var allSubjects = subjectCollection.Find(_ => true).ToList();
 
-            foreach(var subject in allSubjects)
+            var allProfessors = professors.Find(_ => true).ToList();
+
+            foreach(var professor in allProfessors)
             {
-                Console.WriteLine(subject);
+                Console.WriteLine(professor);
             }
 
             Console.WriteLine("Filter");
 
-            var titleFilter = Builders<BsonDocument>.Filter.Eq("Title", "title1");
-            var descFilter = Builders<BsonDocument>.Filter.Eq("Description", "desc1");
-
-            await subjectCollection.Find(titleFilter & descFilter).ForEachAsync(document => Console.WriteLine(document));
+            await professors.Find(pr => pr.Address.Country == "Ukraine" && (pr.Name.Contains("2") || pr.Name.Contains("4")))
+                .ForEachAsync(pr => Console.WriteLine(pr));
 
             Console.WriteLine("Aggregation");
 
+            var aggregationResult = professors.Aggregate()
+                                              .Match(pr => pr.Address.Country == "Ukraine")
+                                              .Lookup(
+                                                    foreignCollection: departments,
+                                                    localField: prof => prof.Department_id,
+                                                    foreignField: dep => dep.Id,
+                                                    @as: (ProfessorWithDepartment pwd) => pwd.Department)
+                                              .Group(pwd => pwd.Department,
+                                                     group => new { Department = group.Key, Count = group.Count() })
+                                              .Limit(5);
 
-            var match = new BsonDocument
-                {
-                    {
-                        "$match",
-                        new BsonDocument
-                            {
-                                {"Country", "Ukraine"}
-                            }
-                    }
-                };
-
-            var group = new BsonDocument
-                {
-                    { "$group",
-                        new BsonDocument
-                            {
-                                { 
-                                    "Country", new BsonDocument
-                                    {
-                                        { "Country","$Country" },
-                                    }
-                                },
-                                {
-                                    "Count", new BsonDocument
-                                    {
-                                        { "$sum", "$Count" }
-                                    }
-                                }
-                            }
-                  }
-                };
-            
-            var limit = new BsonDocument
-                {
-                    { "$limit",
-                        new BsonDocument
-                            {
-                                "5"
-                            }
-                  }
-                };
-
-
-           
-
-
+            await aggregationResult.ForEachAsync(doc => Console.WriteLine(doc.ToJson()));
         }
 
     }
