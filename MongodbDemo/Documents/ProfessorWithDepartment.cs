@@ -11,7 +11,7 @@ namespace MongodbDemo.Documents
         public string Name { get; set; }
         public Address Address { get; set; }
         public ObjectId Department_id { get; set; }
-        public Department Department { get; set; }
+        public Object Department { get; set; }
        
     }
 }
